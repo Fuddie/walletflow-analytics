@@ -5,17 +5,22 @@
 --
 -- Incremental strategy:
 --   * The first run performs a full build.
---   * Later runs only read source rows newer than the latest created_at already
---     present in this model.
---   * unique_key = transaction_id allows dbt to MERGE matching records instead
---     of blindly appending duplicates.
+--   * Later runs re-read a configurable recent-history window rather than only
+--     reading records newer than the exact latest timestamp already loaded.
+--   * This lookback protects the fact table from late-arriving transactions or
+--     corrections whose event timestamp is slightly older than the latest load.
+--   * unique_key = transaction_id allows dbt to MERGE re-read records safely,
+--     updating existing rows instead of creating duplicates.
 --   * partition_by transaction_date improves BigQuery pruning for date filters.
 --   * cluster_by supports common customer/type/status access patterns.
 --   * on_schema_change = 'fail' prevents an unexpected upstream schema change
 --     from silently changing the production fact table.
 --
+-- The lookback length is configured in dbt_project.yml as
+-- var('incremental_lookback_days'). The default project value is 3 days.
+--
 -- Portfolio note: the current source data is synthetic and static, but this
--- configuration demonstrates how the model would be operated at larger scale.
+-- configuration demonstrates a common production pattern for delayed events.
 
 {{
     config(
@@ -47,12 +52,16 @@ with transactions as (
     from {{ ref('stg_transactions') }}
 
     {% if is_incremental() %}
-        -- Incremental filter: only process records newer than the most recent
-        -- transaction already loaded. COALESCE protects the first incremental
-        -- run if the target exists but contains no rows.
-        where created_at > (
-            select coalesce(max(created_at), timestamp('1900-01-01'))
-            from {{ this }}
+        -- Late-arriving-data protection:
+        -- Instead of starting exactly after max(created_at), subtract the
+        -- configurable lookback window and reprocess those recent records.
+        -- MERGE + transaction_id then de-duplicates/replaces matching facts.
+        where created_at >= timestamp_sub(
+            (
+                select coalesce(max(created_at), timestamp('1900-01-01'))
+                from {{ this }}
+            ),
+            interval {{ var('incremental_lookback_days', 3) }} day
         )
     {% endif %}
 )
