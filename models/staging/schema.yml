@@ -1,0 +1,56 @@
+version: 2
+
+models:
+  - name: stg_customers
+    description: Cleaned customer records from the synthetic source dataset.
+    columns:
+      - name: customer_id
+        tests: [not_null, unique]
+      - name: email
+        tests: [not_null]
+      - name: customer_segment
+        tests:
+          - accepted_values:
+              values: ['STANDARD', 'PREMIUM', 'BUSINESS']
+
+  - name: stg_wallets
+    description: Cleaned digital wallet records.
+    columns:
+      - name: wallet_id
+        tests: [not_null, unique]
+      - name: customer_id
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_customers')
+              field: customer_id
+      - name: wallet_status
+        tests:
+          - accepted_values:
+              values: ['ACTIVE', 'DORMANT', 'SUSPENDED']
+
+  - name: stg_transactions
+    description: Cleaned wallet transaction events.
+    columns:
+      - name: transaction_id
+        tests: [not_null, unique]
+      - name: customer_id
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_customers')
+              field: customer_id
+      - name: wallet_id
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_wallets')
+              field: wallet_id
+      - name: status
+        tests:
+          - accepted_values:
+              values: ['success', 'failed', 'reversed']
+      - name: transaction_type
+        tests:
+          - accepted_values:
+              values: ['transfer', 'card_payment', 'airtime', 'bill_payment', 'cash_in', 'cash_out']
