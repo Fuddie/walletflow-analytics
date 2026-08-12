@@ -1,5 +1,16 @@
 with source as (
-    select * from {{ ref('raw_transactions') }}
+    select
+        transaction_id,
+        wallet_id,
+        customer_id,
+        transaction_type,
+        status,
+        amount_ngn,
+        fee_ngn,
+        merchant_category,
+        created_at,
+        completed_at
+    from {{ ref('raw_transactions') }}
 ),
 
 cleaned as (
@@ -17,4 +28,15 @@ cleaned as (
     from source
 )
 
-select * from cleaned
+select
+    transaction_id,
+    wallet_id,
+    customer_id,
+    transaction_type,
+    status,
+    amount_ngn,
+    fee_ngn,
+    merchant_category,
+    created_at,
+    completed_at
+from cleaned
