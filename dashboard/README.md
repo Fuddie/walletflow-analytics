@@ -1,123 +1,115 @@
 # WalletFlow Dashboard Specification
 
-This folder documents the BI layer for the WalletFlow fintech analytics project.
+This folder documents the reporting layer for WalletFlow. Metrics are defined in dbt models so reporting tools use the same calculations.
 
-The dashboard is intentionally designed on top of governed marts rather than raw transaction tables. That keeps metric definitions consistent across BI tools and makes the logic easier to test.
+## KPI cards
 
-## Executive KPI cards
-
-1. **Gross Transaction Value (GTV)** — total attempted transaction value across the selected period.
+1. **Gross Transaction Value (GTV)** — total attempted transaction value in the selected period.
 2. **Transaction Success Rate** — successful transactions divided by total transaction attempts.
 3. **Transactions** — total transaction attempts.
 4. **Successful Transaction Value** — value of successful transactions only.
 5. **Fees Generated** — fees associated with successful transactions.
-6. **DAU (Daily Active Users)** — distinct customers with at least one transaction attempt on a day.
-7. **MAU (Monthly Active Users)** — distinct customers with at least one transaction attempt in a month.
-8. **Average DAU** — average daily active-user count across observed dates in a month.
-9. **DAU/MAU Stickiness** — average DAU divided by MAU. This approximates how frequently the monthly user base engages on an average day.
-10. **Monthly Retention Rate** — customers active in both the current and previous month divided by the previous month's MAU.
+6. **DAU** — distinct customers with at least one transaction attempt on a day.
+7. **MAU** — distinct customers with at least one transaction attempt in a month.
+8. **Average DAU** — average daily active-customer count across observed dates in a month.
+9. **DAU/MAU** — average DAU divided by MAU.
+10. **Monthly Retention Rate** — customers active in both the current and previous month divided by previous-month MAU.
 11. **Cohort Retention Rate** — successful-transaction customers retained in later months divided by the size of their first-success cohort.
 12. **Failed Transaction Rate** — failed transactions divided by total transaction attempts.
 13. **Reversal Rate** — reversed transactions divided by total transaction attempts.
 14. **Average Transaction Value** — GTV divided by transaction count.
 
-## Metric ownership in the model layer
+## Reporting models
 
 ### `mart_daily_wallet_kpis`
-Use for:
+Used for:
 
 - DAU
 - transaction count
-- success/failure/reversal monitoring
+- success, failure and reversal monitoring
 - GTV
 - successful transaction value
 - fees generated
 
 ### `mart_monthly_engagement_kpis`
-Use for:
+Used for:
 
 - MAU
 - average DAU
 - peak DAU
-- DAU/MAU stickiness
-- previous-month retained customers
+- DAU/MAU
+- returning customers
 - monthly retention rate
 
 ### `mart_customer_cohort_retention`
-Use for:
+Used for:
 
 - cohort size
 - retained customers by month number
 - cohort retention rate
-- retention curves / heatmaps
+- retention heatmaps
 
 ## Recommended visuals
 
-### 1. Executive KPI strip
-Show the selected period's GTV, transaction count, success rate, MAU, average DAU, DAU/MAU stickiness and retention rate.
-
-### 2. Monthly GTV and transaction trend
+### Monthly GTV and transaction trend
 Use `mart_daily_wallet_kpis` aggregated by month.
 
 - X-axis: month
 - Primary measure: GTV
 - Secondary measure: transaction count
 
-### 3. DAU and MAU trend
-Use `mart_monthly_engagement_kpis` for MAU and average DAU, with `mart_daily_wallet_kpis` for individual daily points if needed.
+### DAU and MAU trend
+Use `mart_monthly_engagement_kpis` for MAU and average DAU. Use `mart_daily_wallet_kpis` for individual daily active-customer points if needed.
 
-- X-axis: month
-- Measures: MAU, average DAU, peak DAU
-
-### 4. DAU/MAU stickiness trend
+### DAU/MAU trend
 Use `mart_monthly_engagement_kpis`.
 
 - X-axis: month
-- Measure: DAU/MAU stickiness
+- Measure: DAU/MAU
 - Format: percentage
 
-### 5. Month-over-month retention trend
+### Month-over-month retention
 Use `mart_monthly_engagement_kpis`.
 
 - X-axis: month
 - Measure: monthly retention rate
 - Supporting measures: previous-month MAU and retained customers
 
-### 6. Cohort retention heatmap
+### Cohort retention heatmap
 Use `mart_customer_cohort_retention`.
 
-- Rows: cohort_month
-- Columns: month_number
-- Value: retention_rate
+- Rows: cohort month
+- Columns: month number
+- Value: retention rate
 
-### 7. Success rate by transaction type
+### Success rate by transaction type
 Use `fct_transactions`.
 
-- Category: transaction_type
+- Category: transaction type
 - Measure: successful transactions / total transactions
 
-### 8. Transaction mix
+### Transaction mix
 Use `fct_transactions`.
 
-- Category: transaction_type
+- Category: transaction type
 - Measures: transaction count and transaction value
 
-### 9. Customer segment contribution
+### Customer segment contribution
 Join `dim_customers` to `fct_transactions`.
 
-- Category: customer_segment
-- Measures: GTV, successful value, active customers
+- Category: customer segment
+- Measures: GTV, successful value and active customers
 
-### 10. Failed transaction monitoring
+### Failed transaction monitoring
 Use `fct_transactions`.
 
-- X-axis: transaction_date
+- X-axis: transaction date
 - Measure: failed transaction count or rate
-- Breakdown: transaction_type
+- Breakdown: transaction type
 
 ## Synthetic dataset benchmark
 
-The deterministic generator uses seed `42` and currently produces:
+The deterministic generator uses seed `42` and produces:
 
 - **250 customers**
 - **250 wallets**
@@ -139,8 +131,4 @@ Monthly engagement from the generated sample:
 | May 2026 | 243 | 27.32 | 37 | 11.24% | 97.13% |
 | Jun 2026 | 238 | 25.80 | 38 | 10.84% | 95.06% |
 
-These figures are synthetic and exist only to demonstrate analytics engineering and BI design.
-
-## Dashboard interview explanation
-
-> "I designed the dashboard around governed marts rather than querying raw transaction tables directly. Daily transaction KPIs, MAU, DAU, stickiness and retention are defined in the transformation layer, then tested before BI consumes them. That means analysts and product teams use the same definitions instead of rebuilding metrics independently in every dashboard."
+All figures above come from synthetic data generated for this project.
