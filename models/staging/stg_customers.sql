@@ -1,12 +1,14 @@
 -- Model: stg_customers
--- Purpose: Standardise the raw synthetic customer seed into a clean, typed,
+-- Purpose: Standardise the raw synthetic customer source into a clean, typed,
 -- source-aligned staging model for downstream dimensions and marts.
 -- Grain: One row per customer_id.
 -- Important design choice: Columns are selected explicitly so upstream schema
 -- changes do not silently propagate into downstream models.
 
 with source as (
-    -- Keep only fields required by the analytics layer.
+    -- Read from the declared dbt source rather than referencing the seed model
+    -- directly. This makes source lineage visible in dbt docs and allows source
+    -- tests/freshness configuration to live in one place.
     select
         customer_id,
         first_name,
@@ -16,7 +18,7 @@ with source as (
         customer_segment,
         signup_date,
         is_verified
-    from {{ ref('raw_customers') }}
+    from {{ source('walletflow_raw', 'raw_customers') }}
 ),
 
 cleaned as (
