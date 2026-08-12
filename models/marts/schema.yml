@@ -7,7 +7,8 @@ models:
   - name: fct_transactions
     description: >-
       Central transaction fact table. Grain is one row per transaction_id.
-      The model is incrementally materialised with transaction_id as the merge key.
+      The model is incrementally materialised with transaction_id as the merge key
+      and a configurable lookback window for late-arriving records.
     columns:
       - name: transaction_id
         description: Primary key for a wallet transaction event.
@@ -36,13 +37,11 @@ models:
       - name: transaction_date
         description: Calendar date derived from created_at for BI filtering and aggregation.
         tests:
-          # Reporting rows must always have a usable calendar date.
           - not_null
 
       - name: amount_ngn
         description: Transaction amount denominated in Nigerian naira.
         tests:
-          # Financial facts should never have a missing amount.
           - not_null
 
       - name: is_successful
@@ -68,14 +67,12 @@ models:
       - name: customer_id
         description: Primary key for the customer dimension.
         tests:
-          # Grain enforcement: each customer appears exactly once.
           - not_null
           - unique
 
       - name: lifetime_transaction_count
         description: Total transaction attempts observed for the customer.
         tests:
-          # Customers without activity are intentionally represented as zero, not NULL.
           - not_null
 
       - name: lifetime_successful_transaction_count
@@ -108,7 +105,6 @@ models:
       - name: transaction_success_rate
         description: Successful transaction count divided by total transaction attempts.
         tests:
-          # Every populated reporting date should have a calculable success rate.
           - not_null
           # Range test: a proportion must remain between 0 and 1 inclusive.
           - dbt_utils.accepted_range:
@@ -122,7 +118,7 @@ models:
           - not_null
 
       - name: active_customers
-        description: Distinct customers with at least one transaction attempt on the date.
+        description: Daily active users (DAU): distinct customers with at least one transaction attempt on the date.
         tests:
           - not_null
 
@@ -133,8 +129,6 @@ models:
 
     tests:
       # Composite-grain test: a customer must appear only once in a given month.
-      # This catches accidental duplicate monthly aggregates caused by joins or
-      # grouping changes.
       - dbt_utils.unique_combination_of_columns:
           combination_of_columns:
             - activity_month
@@ -150,7 +144,6 @@ models:
         description: Customer represented by the monthly activity row.
         tests:
           - not_null
-          # Monthly activity must map back to a known customer.
           - relationships:
               to: ref('stg_customers')
               field: customer_id
@@ -172,12 +165,10 @@ models:
 
   - name: mart_customer_cohort_retention
     description: >-
-      Monthly retention mart based on first successful transaction cohort.
+      Monthly cohort-retention mart based on first successful transaction.
       Grain is one row per cohort_month + activity_month.
 
     tests:
-      # Composite-grain test: each cohort/activity-month pair must have only one
-      # aggregated retention row.
       - dbt_utils.unique_combination_of_columns:
           combination_of_columns:
             - cohort_month
@@ -198,7 +189,6 @@ models:
         description: Number of whole months since cohort acquisition; 0 is the cohort month.
         tests:
           - not_null
-          # Cohort activity cannot logically occur before acquisition.
           - dbt_utils.accepted_range:
               min_value: 0
               inclusive: true
@@ -207,7 +197,6 @@ models:
         description: Number of customers originally acquired into the cohort.
         tests:
           - not_null
-          # Every cohort represented in the mart must contain at least one customer.
           - dbt_utils.accepted_range:
               min_value: 1
               inclusive: true
@@ -224,7 +213,73 @@ models:
         description: retained_customers divided by cohort_size.
         tests:
           - not_null
-          # Logical range test: retention cannot be below 0% or above 100%.
+          - dbt_utils.accepted_range:
+              min_value: 0
+              max_value: 1
+              inclusive: true
+
+  - name: mart_monthly_engagement_kpis
+    description: >-
+      Governed product-engagement mart containing MAU, DAU summaries,
+      DAU/MAU stickiness and previous-month retention. Grain is one row per month.
+    columns:
+      - name: activity_month
+        description: Calendar month represented by the engagement KPI row.
+        tests:
+          # One monthly KPI row per calendar month.
+          - not_null
+          - unique
+
+      - name: monthly_active_users
+        description: MAU: distinct customers with at least one transaction attempt in the month.
+        tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              min_value: 1
+              inclusive: true
+
+      - name: average_daily_active_users
+        description: Average DAU across the observed transaction dates in the month.
+        tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              min_value: 0
+              inclusive: true
+
+      - name: peak_daily_active_users
+        description: Highest DAU observed on any date in the month.
+        tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              min_value: 0
+              inclusive: true
+
+      - name: dau_mau_stickiness
+        description: Average DAU divided by MAU; indicates frequency of monthly-user engagement.
+        tests:
+          - not_null
+          # A DAU/MAU proportion must remain between 0 and 1.
+          - dbt_utils.accepted_range:
+              min_value: 0
+              max_value: 1
+              inclusive: true
+
+      - name: previous_month_active_users
+        description: MAU from the immediately preceding month; NULL for the first available month.
+
+      - name: previous_month_retained_customers
+        description: Customers active in both this month and the immediately preceding month.
+        tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              min_value: 0
+              inclusive: true
+
+      - name: monthly_retention_rate
+        description: Previous-month retained customers divided by previous-month MAU; NULL when no prior month exists.
+        tests:
+          # NULL is allowed for the first month, while all populated values must
+          # remain valid percentages.
           - dbt_utils.accepted_range:
               min_value: 0
               max_value: 1
