@@ -1,56 +1,102 @@
 version: 2
 
+# Staging tests protect the clean source-aligned layer before data reaches marts.
+# Each test below documents both the rule and why the rule matters.
 models:
   - name: stg_customers
-    description: Cleaned customer records from the synthetic source dataset.
+    description: >-
+      Cleaned synthetic customer records. Grain is one row per customer_id.
     columns:
       - name: customer_id
-        tests: [not_null, unique]
-      - name: email
-        tests: [not_null]
-      - name: customer_segment
+        description: Primary customer identifier used for joins across the project.
         tests:
+          # not_null: every staged customer must have a usable business key.
+          - not_null
+          # unique: protects the one-row-per-customer grain.
+          - unique
+
+      - name: email
+        description: Normalised customer email used as a descriptive customer attribute.
+        tests:
+          # not_null: this synthetic source is expected to provide an email for every customer.
+          - not_null
+
+      - name: customer_segment
+        description: Controlled commercial segment assigned to the customer.
+        tests:
+          # accepted_values: catches unexpected categories or casing changes upstream.
           - accepted_values:
               values: ['STANDARD', 'PREMIUM', 'BUSINESS']
 
   - name: stg_wallets
-    description: Cleaned digital wallet records.
+    description: >-
+      Cleaned digital wallet records. Grain is one row per wallet_id.
     columns:
       - name: wallet_id
-        tests: [not_null, unique]
-      - name: customer_id
+        description: Primary wallet identifier.
         tests:
+          # not_null + unique together enforce the declared wallet grain.
           - not_null
+          - unique
+
+      - name: customer_id
+        description: Customer who owns the wallet.
+        tests:
+          # not_null: an orphan wallet without an owner is invalid for this model.
+          - not_null
+          # relationships: every wallet owner must exist in stg_customers.
           - relationships:
               to: ref('stg_customers')
               field: customer_id
+
       - name: wallet_status
+        description: Current lifecycle status of the synthetic wallet.
         tests:
+          # accepted_values: prevents unknown status values from reaching reporting.
           - accepted_values:
               values: ['ACTIVE', 'DORMANT', 'SUSPENDED']
 
   - name: stg_transactions
-    description: Cleaned wallet transaction events.
+    description: >-
+      Cleaned wallet transaction events. Grain is one row per transaction_id.
     columns:
       - name: transaction_id
-        tests: [not_null, unique]
-      - name: customer_id
+        description: Primary transaction identifier.
         tests:
+          # not_null + unique enforce one row per transaction event.
           - not_null
+          - unique
+
+      - name: customer_id
+        description: Customer associated with the transaction.
+        tests:
+          # not_null: every transaction must be attributable to a customer.
+          - not_null
+          # relationships: prevents transaction records referencing unknown customers.
           - relationships:
               to: ref('stg_customers')
               field: customer_id
+
       - name: wallet_id
+        description: Wallet used for the transaction.
         tests:
+          # not_null: every transaction must reference a wallet.
           - not_null
+          # relationships: prevents transaction records referencing unknown wallets.
           - relationships:
               to: ref('stg_wallets')
               field: wallet_id
+
       - name: status
+        description: Normalised final transaction status.
         tests:
+          # accepted_values: ensures KPI logic only receives known transaction outcomes.
           - accepted_values:
               values: ['success', 'failed', 'reversed']
+
       - name: transaction_type
+        description: Normalised transaction product/category.
         tests:
+          # accepted_values: flags unexpected transaction products before they reach marts.
           - accepted_values:
               values: ['transfer', 'card_payment', 'airtime', 'bill_payment', 'cash_in', 'cash_out']
