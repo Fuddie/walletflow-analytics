@@ -1,5 +1,11 @@
 with transactions as (
-    select * from {{ ref('fct_transactions') }}
+    select
+        transaction_date,
+        customer_id,
+        transaction_type,
+        amount_ngn,
+        is_successful
+    from {{ ref('fct_transactions') }}
 )
 
 select
@@ -11,4 +17,4 @@ select
     count(distinct transaction_type) as transaction_types_used,
     max(transaction_date) as latest_activity_date
 from transactions
-group by 1, 2
+group by activity_month, customer_id
