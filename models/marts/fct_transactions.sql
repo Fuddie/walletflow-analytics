@@ -1,5 +1,16 @@
 with transactions as (
-    select * from {{ ref('stg_transactions') }}
+    select
+        transaction_id,
+        wallet_id,
+        customer_id,
+        transaction_type,
+        status,
+        amount_ngn,
+        fee_ngn,
+        merchant_category,
+        created_at,
+        completed_at
+    from {{ ref('stg_transactions') }}
 )
 
 select
