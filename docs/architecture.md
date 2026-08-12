@@ -39,10 +39,10 @@ One row per customer with registration information, wallet attributes and lifeti
 
 ## Reporting marts
 
-- `mart_daily_wallet_kpis` — daily transaction performance and DAU
-- `mart_customer_monthly_activity` — customer-level monthly activity
-- `mart_monthly_engagement_kpis` — MAU, average DAU, peak DAU, DAU/MAU and month-over-month retention
-- `mart_customer_cohort_retention` — retention by first-success cohort
+- `mart_daily_wallet_kpis`: daily transaction performance and DAU
+- `mart_customer_monthly_activity`: customer-level monthly activity
+- `mart_monthly_engagement_kpis`: MAU, average DAU, peak DAU, DAU/MAU and month-over-month retention
+- `mart_customer_cohort_retention`: retention by first-success cohort
 
 ## Data flow
 
