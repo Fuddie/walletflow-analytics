@@ -1,0 +1,152 @@
+version: 2
+
+# Mart tests protect the business-facing layer that would feed BI dashboards.
+# The comments explain the business rule each test is intended to enforce.
+models:
+  - name: fct_transactions
+    description: >-
+      Central transaction fact table. Grain is one row per transaction_id.
+    columns:
+      - name: transaction_id
+        description: Primary key for a wallet transaction event.
+        tests:
+          # not_null + unique enforce the declared fact-table grain.
+          - not_null
+          - unique
+
+      - name: customer_id
+        description: Customer associated with the transaction.
+        tests:
+          # relationships: every fact row must map to a known staged customer.
+          - relationships:
+              to: ref('stg_customers')
+              field: customer_id
+
+      - name: wallet_id
+        description: Wallet used for the transaction.
+        tests:
+          # relationships: every fact row must map to a known staged wallet.
+          - relationships:
+              to: ref('stg_wallets')
+              field: wallet_id
+
+      - name: transaction_date
+        description: Calendar date derived from created_at for BI filtering and aggregation.
+        tests:
+          - not_null
+
+      - name: amount_ngn
+        description: Transaction amount denominated in Nigerian naira.
+        tests:
+          # not_null: financial facts should always carry an amount.
+          - not_null
+
+      - name: is_successful
+        description: Boolean flag derived from status = 'success'.
+        tests:
+          - not_null
+
+      - name: is_failed
+        description: Boolean flag derived from status = 'failed'.
+        tests:
+          - not_null
+
+      - name: is_reversed
+        description: Boolean flag derived from status = 'reversed'.
+        tests:
+          - not_null
+
+  - name: dim_customers
+    description: >-
+      Customer dimension enriched with wallet attributes and lifetime transaction metrics.
+      Grain is one row per customer_id.
+    columns:
+      - name: customer_id
+        description: Primary key for the customer dimension.
+        tests:
+          # not_null + unique enforce one row per customer.
+          - not_null
+          - unique
+
+      - name: lifetime_transaction_count
+        description: Total transaction attempts observed for the customer.
+        tests:
+          # not_null: customers with no activity are intentionally represented as zero.
+          - not_null
+
+      - name: lifetime_successful_transaction_count
+        description: Total successful transactions observed for the customer.
+        tests:
+          - not_null
+
+      - name: lifetime_successful_value_ngn
+        description: Sum of successful transaction value for the customer.
+        tests:
+          - not_null
+
+  - name: mart_daily_wallet_kpis
+    description: >-
+      Daily business KPI mart for transaction volume, value, outcomes and customer activity.
+      Grain is one row per transaction_date.
+    columns:
+      - name: transaction_date
+        description: Reporting date for the daily KPI row.
+        tests:
+          # unique + not_null ensure one KPI row per date.
+          - not_null
+          - unique
+
+      - name: transaction_count
+        description: Total transaction attempts recorded on the date.
+        tests:
+          - not_null
+
+      - name: transaction_success_rate
+        description: Successful transaction count divided by total transaction attempts.
+        tests:
+          # not_null: every populated reporting date should have a calculable rate.
+          - not_null
+
+      - name: gross_transaction_value_ngn
+        description: Sum of attempted transaction value, irrespective of final status.
+        tests:
+          - not_null
+
+      - name: active_customers
+        description: Distinct customers with at least one transaction attempt on the date.
+        tests:
+          - not_null
+
+  - name: mart_customer_monthly_activity
+    description: >-
+      Monthly customer activity mart used for engagement, retention and cohort analysis.
+      Grain is one row per customer_id per activity_month.
+    columns:
+      - name: activity_month
+        description: Calendar month of customer activity.
+        tests:
+          - not_null
+
+      - name: customer_id
+        description: Customer represented by the monthly activity row.
+        tests:
+          - not_null
+          # relationships: monthly activity must map back to a known customer.
+          - relationships:
+              to: ref('stg_customers')
+              field: customer_id
+
+      - name: transaction_count
+        description: Total transaction attempts made by the customer in the month.
+        tests:
+          - not_null
+
+      - name: successful_transaction_count
+        description: Successful transaction attempts by the customer in the month.
+        tests:
+          - not_null
+
+      - name: latest_activity_date
+        description: Most recent transaction date observed for the customer in the month.
+        tests:
+          - not_null
