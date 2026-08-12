@@ -1,0 +1,102 @@
+name: dbt CI
+
+# Run quality checks whenever a pull request targets main, and allow a manual
+# run from the GitHub Actions tab for demonstration or troubleshooting.
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  sql-policy-check:
+    name: SQL policy checks
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Reject SELECT star in models and tests
+        shell: bash
+        run: |
+          # Portfolio convention: transformation and test SQL must explicitly
+          # name required columns. This protects model contracts from accidental
+          # upstream schema propagation.
+          if grep -RniE 'select[[:space:]]+\*' models tests --include='*.sql'; then
+            echo 'SELECT * found in a model/test. Please select explicit columns.'
+            exit 1
+          fi
+          echo 'No SELECT * usage found in models or tests.'
+
+  dbt-build:
+    name: dbt build and tests
+    runs-on: ubuntu-latest
+    env:
+      GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+      GCP_SERVICE_ACCOUNT_JSON: ${{ secrets.GCP_SERVICE_ACCOUNT_JSON }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dbt BigQuery adapter
+        run: pip install -r requirements.txt
+
+      - name: Install dbt packages
+        run: dbt deps
+
+      - name: Explain credential requirement when secrets are missing
+        if: ${{ env.GCP_PROJECT_ID == '' || env.GCP_SERVICE_ACCOUNT_JSON == '' }}
+        run: |
+          echo 'BigQuery CI build skipped because repository secrets are not configured.'
+          echo 'Required secrets: GCP_PROJECT_ID and GCP_SERVICE_ACCOUNT_JSON.'
+          echo 'The SQL policy job still runs without cloud credentials.'
+
+      - name: Create temporary BigQuery service-account key
+        if: ${{ env.GCP_PROJECT_ID != '' && env.GCP_SERVICE_ACCOUNT_JSON != '' }}
+        shell: bash
+        run: |
+          printf '%s' "$GCP_SERVICE_ACCOUNT_JSON" > "$RUNNER_TEMP/gcp-key.json"
+
+      - name: Create CI dbt profile
+        if: ${{ env.GCP_PROJECT_ID != '' && env.GCP_SERVICE_ACCOUNT_JSON != '' }}
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/dbt-ci"
+          cat > "$RUNNER_TEMP/dbt-ci/profiles.yml" <<EOF
+          walletflow_analytics:
+            target: ci
+            outputs:
+              ci:
+                type: bigquery
+                method: service-account
+                project: ${GCP_PROJECT_ID}
+                dataset: walletflow_ci
+                keyfile: ${RUNNER_TEMP}/gcp-key.json
+                threads: 4
+                timeout_seconds: 300
+                location: US
+          EOF
+
+      - name: Load synthetic seed data
+        if: ${{ env.GCP_PROJECT_ID != '' && env.GCP_SERVICE_ACCOUNT_JSON != '' }}
+        run: dbt seed --full-refresh --profiles-dir "$RUNNER_TEMP/dbt-ci"
+
+      - name: Run dbt build
+        if: ${{ env.GCP_PROJECT_ID != '' && env.GCP_SERVICE_ACCOUNT_JSON != '' }}
+        run: |
+          # dbt build creates models and runs schema + singular tests in DAG order.
+          # A failed model or test makes this CI check fail.
+          dbt build --profiles-dir "$RUNNER_TEMP/dbt-ci"
+
+      - name: Run source freshness check
+        if: ${{ env.GCP_PROJECT_ID != '' && env.GCP_SERVICE_ACCOUNT_JSON != '' }}
+        run: |
+          # Source freshness uses created_at as a documented demo proxy because
+          # the synthetic seed does not contain a real warehouse ingestion field.
+          dbt source freshness --profiles-dir "$RUNNER_TEMP/dbt-ci"
