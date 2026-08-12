@@ -7,7 +7,12 @@ version: 2
 sources:
   - name: walletflow_raw
     description: Synthetic raw WalletFlow source tables loaded into the raw schema.
-    schema: raw
+
+    # dbt's default custom-schema naming pattern combines target.schema with the
+    # +schema value configured for seeds. Because dbt_project.yml sets seeds to
+    # +schema: raw, the physical BigQuery dataset is expected to be
+    # <target_schema>_raw unless a custom generate_schema_name macro is supplied.
+    schema: "{{ target.schema }}_raw"
 
     tables:
       - name: raw_customers
