@@ -19,11 +19,11 @@ WalletFlow provides a structured reporting layer for questions such as:
 
 ## Technology
 
-- **dbt** — transformations, tests, documentation and incremental models
-- **Google BigQuery** — warehouse design, partitioning and clustering
-- **SQL** — data modelling and metric definitions
-- **Python** — deterministic synthetic data generation
-- **GitHub Actions** — pull-request SQL checks and dbt CI when BigQuery credentials are available
+- **dbt**: transformations, tests, documentation and incremental models
+- **Google BigQuery**: warehouse design, partitioning and clustering
+- **SQL**: data modelling and metric definitions
+- **Python**: deterministic synthetic data generation
+- **GitHub Actions**: pull-request SQL checks and dbt CI when BigQuery credentials are available
 
 ## Model structure
 
