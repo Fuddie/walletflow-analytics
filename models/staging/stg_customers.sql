@@ -1,5 +1,14 @@
 with source as (
-    select * from {{ ref('raw_customers') }}
+    select
+        customer_id,
+        first_name,
+        last_name,
+        email,
+        state,
+        customer_segment,
+        signup_date,
+        is_verified
+    from {{ ref('raw_customers') }}
 ),
 
 cleaned as (
@@ -15,4 +24,13 @@ cleaned as (
     from source
 )
 
-select * from cleaned
+select
+    customer_id,
+    first_name,
+    last_name,
+    email,
+    state,
+    customer_segment,
+    signup_date,
+    is_verified
+from cleaned
