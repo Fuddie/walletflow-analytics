@@ -1,5 +1,11 @@
 with source as (
-    select * from {{ ref('raw_wallets') }}
+    select
+        wallet_id,
+        customer_id,
+        created_at,
+        wallet_status,
+        current_balance_ngn
+    from {{ ref('raw_wallets') }}
 ),
 
 cleaned as (
@@ -12,4 +18,10 @@ cleaned as (
     from source
 )
 
-select * from cleaned
+select
+    wallet_id,
+    customer_id,
+    wallet_created_at,
+    wallet_status,
+    current_balance_ngn
+from cleaned
