@@ -4,20 +4,20 @@ This folder documents the reporting layer for WalletFlow. Metrics are defined in
 
 ## KPI cards
 
-1. **Gross Transaction Value (GTV)** — total attempted transaction value in the selected period.
-2. **Transaction Success Rate** — successful transactions divided by total transaction attempts.
-3. **Transactions** — total transaction attempts.
-4. **Successful Transaction Value** — value of successful transactions only.
-5. **Fees Generated** — fees associated with successful transactions.
-6. **DAU** — distinct customers with at least one transaction attempt on a day.
-7. **MAU** — distinct customers with at least one transaction attempt in a month.
-8. **Average DAU** — average daily active-customer count across observed dates in a month.
-9. **DAU/MAU** — average DAU divided by MAU.
-10. **Monthly Retention Rate** — customers active in both the current and previous month divided by previous-month MAU.
-11. **Cohort Retention Rate** — successful-transaction customers retained in later months divided by the size of their first-success cohort.
-12. **Failed Transaction Rate** — failed transactions divided by total transaction attempts.
-13. **Reversal Rate** — reversed transactions divided by total transaction attempts.
-14. **Average Transaction Value** — GTV divided by transaction count.
+1. **Gross Transaction Value (GTV):** total attempted transaction value in the selected period.
+2. **Transaction Success Rate:** successful transactions divided by total transaction attempts.
+3. **Transactions:** total transaction attempts.
+4. **Successful Transaction Value:** value of successful transactions only.
+5. **Fees Generated:** fees associated with successful transactions.
+6. **DAU:** distinct customers with at least one transaction attempt on a day.
+7. **MAU:** distinct customers with at least one transaction attempt in a month.
+8. **Average DAU:** average daily active-customer count across observed dates in a month.
+9. **DAU/MAU:** average DAU divided by MAU.
+10. **Monthly Retention Rate:** customers active in both the current and previous month divided by previous-month MAU.
+11. **Cohort Retention Rate:** successful-transaction customers retained in later months divided by the size of their first-success cohort.
+12. **Failed Transaction Rate:** failed transactions divided by total transaction attempts.
+13. **Reversal Rate:** reversed transactions divided by total transaction attempts.
+14. **Average Transaction Value:** GTV divided by transaction count.
 
 ## Reporting models
 
