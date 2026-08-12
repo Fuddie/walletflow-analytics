@@ -5,7 +5,8 @@
 -- Data-quality expectations are documented in schema.yml and singular tests.
 
 with source as (
-    -- Explicit projection prevents accidental propagation of new raw columns.
+    -- Read from the declared dbt source so lineage and source-quality rules are
+    -- visible in dbt documentation.
     select
         transaction_id,
         wallet_id,
@@ -17,7 +18,7 @@ with source as (
         merchant_category,
         created_at,
         completed_at
-    from {{ ref('raw_transactions') }}
+    from {{ source('walletflow_raw', 'raw_transactions') }}
 ),
 
 cleaned as (
