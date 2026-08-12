@@ -1,17 +1,12 @@
 version: 2
 
-# Raw-source declarations make the ingestion boundary explicit in dbt docs.
-# In this portfolio project, the raw tables are created from synthetic dbt seeds.
-# In production, these source definitions would normally point to landing tables
-# populated by an ingestion tool or application event pipeline.
+# Raw-source declarations define the ingestion boundary used by dbt.
+# In this project the raw tables are created from synthetic dbt seeds.
 sources:
   - name: walletflow_raw
-    description: Synthetic raw WalletFlow source tables loaded into the raw schema.
+    description: Synthetic WalletFlow source tables loaded into the raw schema.
 
-    # dbt's default custom-schema naming pattern combines target.schema with the
-    # +schema value configured for seeds. Because dbt_project.yml sets seeds to
-    # +schema: raw, the physical BigQuery dataset is expected to be
-    # <target_schema>_raw unless a custom generate_schema_name macro is supplied.
+    # dbt combines target.schema with the configured seed schema by default.
     schema: "{{ target.schema }}_raw"
 
     tables:
@@ -19,19 +14,18 @@ sources:
         description: Synthetic customer registration records.
         columns:
           - name: customer_id
-            description: Raw customer business key.
+            description: Customer business key.
             tests:
-              # Source-level not_null catches malformed records before staging.
+              # Required key check.
               - not_null
-              # Source-level unique checks whether the upstream extract violates
-              # the expected one-row-per-customer grain.
+              # One row is expected per customer_id.
               - unique
 
       - name: raw_wallets
-        description: Synthetic wallet master records.
+        description: Synthetic wallet records.
         columns:
           - name: wallet_id
-            description: Raw wallet business key.
+            description: Wallet business key.
             tests:
               - not_null
               - unique
@@ -41,35 +35,33 @@ sources:
               - not_null
 
       - name: raw_transactions
-        description: Synthetic wallet transaction events used as the main event source.
+        description: Synthetic wallet transaction events.
 
-        # DEMO FRESHNESS NOTE:
-        # The synthetic dataset has no true ingestion timestamp. created_at is an
-        # event timestamp, so it is used here only as a freshness proxy to show
-        # how dbt source freshness is configured. A production pipeline should
-        # instead use an ingestion field such as loaded_at or _ingested_at.
+        # The synthetic dataset has no separate warehouse ingestion timestamp.
+        # created_at is therefore used as a freshness proxy. A production source
+        # would normally use a field such as loaded_at or _ingested_at instead.
         loaded_at_field: created_at
         freshness:
-          # Warn when the newest transaction event is more than 60 days old.
+          # Warn if the latest transaction event is more than 60 days old.
           warn_after: {count: 60, period: day}
-          # Fail when the newest transaction event is more than 90 days old.
+          # Fail if the latest transaction event is more than 90 days old.
           error_after: {count: 90, period: day}
 
         columns:
           - name: transaction_id
-            description: Raw transaction business key.
+            description: Transaction business key.
             tests:
               - not_null
               - unique
           - name: customer_id
-            description: Customer associated with the transaction event.
+            description: Customer associated with the transaction.
             tests:
               - not_null
           - name: wallet_id
-            description: Wallet associated with the transaction event.
+            description: Wallet associated with the transaction.
             tests:
               - not_null
           - name: created_at
-            description: Transaction event timestamp; used as a freshness proxy in this demo.
+            description: Transaction event timestamp used for the freshness check.
             tests:
               - not_null
