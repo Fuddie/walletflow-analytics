@@ -6,14 +6,15 @@
 -- customer relationship integrity, and accepted wallet_status values.
 
 with source as (
-    -- Select only fields required by downstream analytics models.
+    -- Read from the declared dbt source so lineage, source tests and freshness
+    -- expectations are documented centrally.
     select
         wallet_id,
         customer_id,
         created_at,
         wallet_status,
         current_balance_ngn
-    from {{ ref('raw_wallets') }}
+    from {{ source('walletflow_raw', 'raw_wallets') }}
 ),
 
 cleaned as (
