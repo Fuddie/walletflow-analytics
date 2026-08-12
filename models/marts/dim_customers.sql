@@ -1,4 +1,12 @@
+-- Model: dim_customers
+-- Purpose: Build a customer dimension enriched with wallet attributes and
+-- lifetime transaction behaviour for customer-level analysis.
+-- Grain: One row per customer_id.
+-- Join strategy: LEFT JOINs preserve customers even when wallet or transaction
+-- activity is missing.
+
 with customers as (
+    -- Customer attributes required in the final dimension.
     select
         customer_id,
         first_name,
@@ -12,6 +20,7 @@ with customers as (
 ),
 
 wallets as (
+    -- Wallet attributes enrich the customer profile.
     select
         wallet_id,
         customer_id,
@@ -21,6 +30,8 @@ wallets as (
 ),
 
 transaction_summary as (
+    -- Aggregate transaction behaviour once at customer grain so the final join
+    -- does not duplicate customer records.
     select
         customer_id,
         count(*) as lifetime_transaction_count,
@@ -44,9 +55,13 @@ select
     w.wallet_id,
     w.wallet_status,
     w.current_balance_ngn,
+
+    -- Customers without transactions receive zero activity counts instead of NULL.
     coalesce(t.lifetime_transaction_count, 0) as lifetime_transaction_count,
     coalesce(t.lifetime_successful_transaction_count, 0) as lifetime_successful_transaction_count,
     coalesce(t.lifetime_successful_value_ngn, 0) as lifetime_successful_value_ngn,
+
+    -- Timestamps remain NULL for customers with no transaction history.
     t.first_transaction_at,
     t.latest_transaction_at
 from customers as c
