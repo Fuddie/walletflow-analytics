@@ -1,38 +1,31 @@
 # WalletFlow Analytics
 
-A personal analytics engineering project that models a fictional digital-wallet business using **dbt, SQL, dimensional modelling, data quality testing, incremental processing, source freshness checks, product engagement KPIs, cohort retention, and CI**.
+WalletFlow is a personal analytics engineering project for a fictional digital-wallet business. It uses synthetic customer, wallet and transaction data to model transaction performance, customer activity and retention with **dbt, BigQuery SQL and Python**.
 
-> **Portfolio note:** WalletFlow is a synthetic fintech project. The company, customers, wallets, and transactions are fictional and were created only to demonstrate analytics engineering skills.
+All data in this repository is synthetic. No employer, customer or production data is used.
 
-## Why this project exists
+## Project scope
 
-Fintech teams often collect large volumes of transactional data, but raw events are not immediately suitable for reporting. Product, operations, finance, and growth teams need consistent definitions for transaction performance, DAU, MAU, stickiness, retention and customer value.
+The project addresses a common reporting problem: operational transaction data is useful for processing payments, but it needs cleaning, consistent definitions and testing before it is suitable for analytics.
 
-WalletFlow demonstrates how an analytics engineer can turn raw wallet data into trusted, reusable datasets while also thinking about **operational reliability**, not only SQL transformations.
+WalletFlow provides a structured reporting layer for questions such as:
 
-## Business questions
-
-This project is designed to answer questions such as:
-
-- How much transaction value flows through the platform each day?
-- What percentage of transactions succeed?
-- Which transaction types have the highest failure rates?
+- How much transaction value is processed each day?
+- What percentage of transactions succeed, fail or reverse?
 - How many customers are active each day and month?
-- How frequently does the monthly user base engage?
-- What percentage of last month's active customers returned this month?
-- How well do first-success cohorts retain over time?
-- Which customer segments contribute the most transaction value?
+- How frequently do monthly active customers use the product?
+- What percentage of active customers return in the following month?
+- How do customer cohorts retain after their first successful transaction?
 
-## Tech stack
+## Technology
 
-- **SQL** — transformation logic and business metrics
-- **dbt** — model organisation, testing, documentation, lineage and incremental builds
-- **Google BigQuery** — target warehouse design, partitioning and clustering
+- **dbt** — transformations, tests, documentation and incremental models
+- **Google BigQuery** — warehouse design, partitioning and clustering
+- **SQL** — data modelling and metric definitions
 - **Python** — deterministic synthetic data generation
-- **GitHub Actions** — pull-request SQL policy checks and optional BigQuery-backed dbt builds
-- **BI-ready marts** — designed for Looker, Looker Studio, or Power BI
+- **GitHub Actions** — pull-request SQL checks and dbt CI when BigQuery credentials are available
 
-## Data model
+## Model structure
 
 ```text
 raw_customers ───────> stg_customers ───────────────> dim_customers
@@ -49,129 +42,126 @@ raw_transactions ────> stg_transactions ─> fct_transactions
                                                      └─> mart_customer_cohort_retention
 ```
 
-## Core models
+## Main models
 
 ### `fct_transactions`
-One row per transaction. The model is configured as an **incremental BigQuery MERGE** using `transaction_id` as the unique key. It is partitioned by `transaction_date`, clustered on common filter dimensions and uses a configurable recent-history lookback to capture late-arriving transactions.
+Transaction fact table with one row per `transaction_id`. It uses an incremental BigQuery MERGE, is partitioned by `transaction_date`, clustered by commonly filtered fields and reprocesses a configurable recent-history window to capture late-arriving records.
 
 ### `dim_customers`
-One row per customer with registration information, customer segment, wallet metadata, and lifetime transaction summaries.
+Customer dimension with registration details, wallet attributes and lifetime transaction measures.
 
 ### `mart_daily_wallet_kpis`
-Daily executive/product KPIs including transaction count, success rate, GTV, successful value, fees and DAU.
+Daily transaction metrics including transaction count, success rate, gross transaction value, successful transaction value, fees and DAU.
 
 ### `mart_monthly_engagement_kpis`
-One row per month containing:
+Monthly engagement metrics including:
 
 - MAU
 - average DAU
 - peak DAU
-- DAU/MAU stickiness
-- previous-month active users
-- previous-month retained customers
+- DAU/MAU ratio
+- previous-month active customers
+- returning customers
 - month-over-month retention rate
 
 ### `mart_customer_monthly_activity`
-Monthly customer-level activity used for engagement and behavioural analysis.
+One row per customer per activity month, with transaction counts, successful activity and transaction value.
 
 ### `mart_customer_cohort_retention`
-Monthly retention by first successful transaction cohort. It reports cohort size, retained customers, month number and cohort retention rate.
+Retention by first-success cohort, including cohort size, retained customers, month number and retention rate.
 
-## Data quality
+## Metric definitions
 
-The project includes documented tests for:
+- **DAU:** distinct customers with at least one transaction attempt on a day.
+- **MAU:** distinct customers with at least one transaction attempt in a month.
+- **DAU/MAU:** average DAU divided by MAU.
+- **Monthly retention:** customers active in both the current and previous month divided by previous-month MAU.
+- **Cohort retention:** customers with successful activity in a later month divided by the size of their first-success cohort.
+- **GTV:** total attempted transaction value.
+- **Transaction success rate:** successful transactions divided by total transaction attempts.
 
-- unique and non-null primary keys
-- accepted transaction statuses and transaction types
-- source-level key validation
-- customer/wallet referential integrity
-- positive transaction values
-- successful transactions having a completion timestamp
-- mutually exclusive transaction outcome flags
-- daily KPI status reconciliation
-- composite grains such as customer + activity date and customer + activity month
-- retention rates remaining between 0% and 100%
-- retained customers never exceeding their denominator population
-- average DAU never exceeding MAU
-- month-zero cohort retention reconciling to 100%
+## Incremental processing and late-arriving data
 
-Every important singular test contains comments explaining **what is tested, why the rule matters, and what a returned row means**.
-
-## Source freshness
-
-`models/staging/sources.yml` declares the raw tables as dbt sources. The transaction source includes a freshness configuration.
-
-Because this synthetic dataset does not contain a true warehouse ingestion timestamp, `created_at` is used only as a **demonstration freshness proxy**. A production pipeline should normally use an ingestion field such as `loaded_at` or `_ingested_at`.
-
-## Late-arriving transactions
-
-The incremental transaction fact uses a project variable:
+The transaction fact uses the project variable below:
 
 ```yaml
 vars:
   incremental_lookback_days: 3
 ```
 
-On incremental runs, the model re-reads the latest three days relative to the most recent loaded transaction rather than reading only strictly newer timestamps. `transaction_id` is then used as the MERGE key, so re-reading recent records does not create duplicates.
+During incremental runs, the model re-reads the most recent three-day window relative to the latest loaded transaction. `transaction_id` is the MERGE key, so existing rows are updated rather than duplicated.
 
-This protects the model from delayed events and recent corrections while avoiding a full-table rebuild.
+This approach captures delayed transactions and recent corrections without rebuilding the full fact table on every run.
 
-## Engagement KPI definitions
+## Data quality
 
-- **DAU:** distinct customers with at least one transaction attempt on a day.
-- **MAU:** distinct customers with at least one transaction attempt in a month.
-- **DAU/MAU stickiness:** average DAU divided by MAU.
-- **Monthly retention:** customers active in both current and previous month divided by previous-month MAU.
-- **Cohort retention:** successful-transaction customers active in a later month divided by the size of their first-success cohort.
+The project includes schema and singular tests for:
 
-## Continuous Integration
+- non-null and unique primary keys
+- accepted transaction statuses and transaction types
+- customer and wallet referential integrity
+- positive transaction amounts
+- completion timestamps for successful transactions
+- mutually exclusive transaction-status flags
+- daily transaction-count reconciliation
+- composite grains such as customer + date and customer + month
+- success and retention rates remaining between 0 and 1
+- retained customers not exceeding the relevant population
+- average DAU not exceeding MAU
+- month-zero cohort retention equalling 100%
 
-`.github/workflows/dbt-ci.yml` adds pull-request quality checks.
+SQL models and tests use explicit column selection rather than `SELECT *`.
 
-The workflow always checks that model/test SQL does **not** use `SELECT *`. When BigQuery repository secrets are configured, it also:
+## Source freshness
 
-1. installs dbt dependencies,
-2. loads the synthetic seed data,
-3. runs `dbt build`, and
-4. runs `dbt source freshness`.
+`models/staging/sources.yml` defines the raw tables as dbt sources. The transaction source includes a freshness check.
 
-The BigQuery-backed steps expect these repository secrets:
+The synthetic dataset does not contain a warehouse ingestion timestamp, so `created_at` is used as a freshness proxy. In a production source, this would normally be replaced with an ingestion field such as `loaded_at` or `_ingested_at`.
 
-- `GCP_PROJECT_ID`
-- `GCP_SERVICE_ACCOUNT_JSON`
+## Continuous integration
 
-Without those cloud credentials, the no-`SELECT *` SQL policy check still runs and the BigQuery build steps are intentionally skipped.
+`.github/workflows/dbt-ci.yml` runs quality checks on pull requests.
 
-## Synthetic dashboard benchmark
+The workflow always checks model and test SQL for `SELECT *`. When `GCP_PROJECT_ID` and `GCP_SERVICE_ACCOUNT_JSON` are configured as repository secrets, the workflow also runs:
 
-The deterministic seed-42 sample produces **250 customers, 250 wallets and 5,000 transactions** from January to June 2026. The dashboard specification documents GTV, transaction success, DAU, MAU, stickiness and retention metrics, including month-by-month benchmark values.
+```bash
+dbt seed --full-refresh
+dbt build
+dbt source freshness
+```
 
-See [`dashboard/README.md`](dashboard/README.md).
+## Synthetic dataset
 
-## How to run
+The deterministic seed-42 dataset contains:
+
+- **250 customers**
+- **250 wallets**
+- **5,000 transactions**
+- transaction activity from **January to June 2026**
+- approximately **₦145.85m GTV**
+- approximately **88.42% transaction success rate**
+
+Monthly engagement figures and dashboard definitions are documented in [`dashboard/README.md`](dashboard/README.md).
+
+## Running the project
 
 1. Install dbt for BigQuery.
-2. Create a BigQuery dataset for the project.
-3. Copy `profiles.example.yml` into your local dbt profiles directory and replace the placeholders.
+2. Create a BigQuery project/dataset for the work.
+3. Copy `profiles.example.yml` to the local dbt profiles directory and replace the placeholders.
 4. Run `dbt deps`.
 5. Run `dbt seed`.
 6. Run `dbt source freshness`.
 7. Run `dbt build`.
-8. Run `dbt docs generate` and `dbt docs serve`.
+8. Run `dbt docs generate` and `dbt docs serve` if local dbt documentation is required.
 
-## Interview explanation
+## Documentation
 
-> "I built WalletFlow to demonstrate how I would structure analytics engineering for a digital wallet. I started with synthetic customer, wallet and transaction data, declared the raw tables as dbt sources, and standardised them in staging. I built reusable intermediate logic, an incremental transaction fact with late-arriving-data protection, customer and KPI marts, MAU/DAU engagement metrics and cohort retention. I added source, schema and reconciliation tests, then added CI so pull requests can enforce SQL conventions and run dbt quality checks before changes reach the main branch."
-
-## Further improvements
-
-- Add customer snapshots for slowly changing attributes
-- Add ingestion timestamps to separate event time from warehouse load time
-- Add orchestration and alerting around failed tests/freshness checks
-- Connect the marts to a live hosted BI dashboard
+- [Architecture](docs/architecture.md)
+- [Technical notes](docs/technical_notes.md)
+- [Dashboard specification](dashboard/README.md)
 
 ## Author
 
 **Fuad Abiola Adebisi**  
 Analytics Engineer  
-GitHub: [Fuddie](https://github.com/Fuddie)
+[GitHub](https://github.com/Fuddie)
