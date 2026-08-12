@@ -7,19 +7,31 @@ models:
     description: >-
       Daily customer activity aggregation built from staged transaction events.
       Grain is one row per customer_id per activity_date.
+
+    tests:
+      # Composite-grain test: neither activity_date nor customer_id is unique by
+      # itself, so this checks that their COMBINATION occurs only once.
+      # A returned duplicate would mean the model has accidentally produced more
+      # than one aggregate row for the same customer on the same date.
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns:
+            - activity_date
+            - customer_id
+
     columns:
       - name: activity_date
         description: Calendar date on which the customer generated transaction activity.
         tests:
-          # not_null: every daily activity row must belong to a reporting date.
+          # Every aggregate row must belong to a reporting date.
           - not_null
 
       - name: customer_id
         description: Customer associated with the daily activity record.
         tests:
-          # not_null: activity cannot exist without a customer identifier.
+          # Activity cannot exist without a customer identifier.
           - not_null
-          # relationships: confirms the activity customer exists in the staged customer table.
+          # Referential-integrity test: confirms the activity customer exists in
+          # the staged customer table.
           - relationships:
               to: ref('stg_customers')
               field: customer_id
@@ -27,7 +39,7 @@ models:
       - name: transaction_count
         description: Total transaction attempts by the customer on the activity date.
         tests:
-          # not_null: aggregation should always produce a count.
+          # Aggregation should always produce a populated count.
           - not_null
 
       - name: successful_transaction_count
