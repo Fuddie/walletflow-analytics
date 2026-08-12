@@ -1,7 +1,7 @@
 name: dbt CI
 
-# Run quality checks whenever a pull request targets main, and allow a manual
-# run from the GitHub Actions tab for demonstration or troubleshooting.
+# Run quality checks whenever a pull request targets main. The workflow can
+# also be started manually from the GitHub Actions tab.
 on:
   pull_request:
     branches: [main]
@@ -18,11 +18,11 @@ jobs:
       - name: Reject SELECT star in models and tests
         shell: bash
         run: |
-          # Portfolio convention: transformation and test SQL must explicitly
-          # name required columns. This protects model contracts from accidental
-          # upstream schema propagation.
+          # Transformation and test SQL must explicitly name required columns.
+          # This keeps model dependencies clear and prevents unexpected upstream
+          # fields from flowing into downstream models.
           if grep -RniE 'select[[:space:]]+\*' models tests --include='*.sql'; then
-            echo 'SELECT * found in a model/test. Please select explicit columns.'
+            echo 'SELECT * found in a model/test. Select explicit columns instead.'
             exit 1
           fi
           echo 'No SELECT * usage found in models or tests.'
@@ -90,13 +90,13 @@ jobs:
       - name: Run dbt build
         if: ${{ env.GCP_PROJECT_ID != '' && env.GCP_SERVICE_ACCOUNT_JSON != '' }}
         run: |
-          # dbt build creates models and runs schema + singular tests in DAG order.
-          # A failed model or test makes this CI check fail.
+          # dbt build creates models and runs schema and singular tests in DAG order.
+          # Any failed model or test causes the CI job to fail.
           dbt build --profiles-dir "$RUNNER_TEMP/dbt-ci"
 
       - name: Run source freshness check
         if: ${{ env.GCP_PROJECT_ID != '' && env.GCP_SERVICE_ACCOUNT_JSON != '' }}
         run: |
-          # Source freshness uses created_at as a documented demo proxy because
-          # the synthetic seed does not contain a real warehouse ingestion field.
+          # created_at is used as the freshness field because the synthetic source
+          # does not include a separate warehouse ingestion timestamp.
           dbt source freshness --profiles-dir "$RUNNER_TEMP/dbt-ci"
