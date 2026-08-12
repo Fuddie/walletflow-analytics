@@ -1,6 +1,6 @@
 # WalletFlow Analytics
 
-A personal analytics engineering project that models a fictional digital-wallet business using **dbt-style transformations, SQL, dimensional modelling, data quality tests, and business-ready marts**.
+A personal analytics engineering project that models a fictional digital-wallet business using **dbt, SQL, dimensional modelling, data quality testing, incremental processing, source freshness checks, and business-ready marts**.
 
 > **Portfolio note:** WalletFlow is a synthetic fintech project. The company, customers, wallets, and transactions are fictional and were created only to demonstrate analytics engineering skills.
 
@@ -8,7 +8,7 @@ A personal analytics engineering project that models a fictional digital-wallet 
 
 Fintech teams often collect large volumes of transactional data, but raw events are not immediately suitable for reporting. Product, operations, finance, and growth teams need consistent definitions for metrics such as transaction volume, success rate, active customers, repeat usage, and customer retention.
 
-WalletFlow demonstrates how an analytics engineer can turn raw wallet data into trusted, reusable datasets.
+WalletFlow demonstrates how an analytics engineer can turn raw wallet data into trusted, reusable datasets while also thinking about **operational reliability**, not only SQL transformations.
 
 ## Business questions
 
@@ -20,13 +20,14 @@ This project is designed to answer questions such as:
 - How many customers are active each day and month?
 - Which customers are repeat users?
 - How does monthly customer activity change over time?
+- How well do customer cohorts retain after their first successful transaction?
 - Which customer segments contribute the most transaction value?
 
 ## Tech stack
 
 - **SQL** — transformation logic and business metrics
-- **dbt** — model organisation, testing, documentation, and lineage
-- **Google BigQuery** — target warehouse design
+- **dbt** — model organisation, testing, documentation, lineage and incremental builds
+- **Google BigQuery** — target warehouse design, partitioning and clustering
 - **Python** — deterministic synthetic data generation
 - **BI-ready marts** — designed for Looker, Looker Studio, or Power BI
 
@@ -42,7 +43,8 @@ raw_transactions ────> stg_transactions ─> fct_transactions
                                 └─> int_customer_daily_activity
                                                      │
                                                      ├─> mart_daily_wallet_kpis
-                                                     └─> mart_customer_monthly_activity
+                                                     ├─> mart_customer_monthly_activity
+                                                     └─> mart_customer_cohort_retention
 ```
 
 ## Repository structure
@@ -51,14 +53,14 @@ raw_transactions ────> stg_transactions ─> fct_transactions
 walletflow-analytics/
 ├── analyses/                  # Ad-hoc business questions
 ├── dashboard/                 # Dashboard metric specification
-├── docs/                      # Architecture and data dictionary
+├── docs/                      # Architecture, data quality and operating notes
 ├── models/
-│   ├── staging/               # Cleaned source-aligned models
+│   ├── staging/               # Source definitions + cleaned source-aligned models
 │   ├── intermediate/          # Reusable transformation logic
-│   └── marts/                 # Business-facing facts, dimensions, KPIs
+│   └── marts/                 # Business-facing facts, dimensions, KPIs and retention
 ├── scripts/                   # Synthetic data generator
 ├── seeds/                     # Synthetic source data
-├── tests/                     # Singular data quality tests
+├── tests/                     # Singular reconciliation/business-rule tests
 ├── dbt_project.yml
 ├── packages.yml
 └── profiles.example.yml
@@ -67,7 +69,7 @@ walletflow-analytics/
 ## Core models
 
 ### `fct_transactions`
-One row per transaction. Contains cleaned transaction attributes, customer and wallet identifiers, transaction status, amount, fees, and derived flags.
+One row per transaction. The model is configured as an **incremental BigQuery model** using `transaction_id` as the merge key. It is partitioned by `transaction_date` and clustered by commonly filtered dimensions.
 
 ### `dim_customers`
 One row per customer with registration information, customer segment, wallet metadata, and lifetime transaction summaries.
@@ -84,18 +86,53 @@ A daily KPI table for executive or product reporting, including:
 - active customers
 
 ### `mart_customer_monthly_activity`
-Monthly customer-level activity used for customer engagement and retention analysis.
+Monthly customer-level activity used for engagement and behavioural analysis.
+
+### `mart_customer_cohort_retention`
+Monthly retention by first successful transaction cohort. It reports cohort size, retained customers, month number and retention rate.
 
 ## Data quality
 
-The project includes tests for:
+The project includes documented tests for:
 
 - unique and non-null primary keys
-- accepted transaction statuses
-- accepted transaction types
+- accepted transaction statuses and transaction types
+- source-level key validation
+- customer/wallet referential integrity
 - positive transaction values
-- valid customer references
 - successful transactions having a completion timestamp
+- mutually exclusive transaction outcome flags
+- daily KPI status reconciliation
+- composite grains such as customer + activity date and customer + activity month
+- retention rates remaining between 0% and 100%
+- retained customers never exceeding original cohort size
+- month-zero cohort retention reconciling to 100%
+
+Every important singular test contains comments explaining **what is tested, why the rule matters, and what a returned row means**.
+
+## Source freshness
+
+`models/staging/sources.yml` declares the raw tables as dbt sources. The transaction source includes a freshness configuration.
+
+Because this is a synthetic portfolio dataset and does not contain a real ingestion timestamp, `created_at` is used only as a **demonstration freshness proxy**. In a production pipeline, freshness should normally use an ingestion timestamp such as `loaded_at` or `_ingested_at`.
+
+Run the freshness check with:
+
+```bash
+dbt source freshness
+```
+
+## Incremental processing
+
+`fct_transactions` demonstrates an incremental MERGE pattern:
+
+- `transaction_id` is the unique merge key
+- later runs process only transactions newer than the latest loaded `created_at`
+- the model is partitioned by transaction date
+- clustering supports common customer, type and status filters
+- unexpected schema changes are configured to fail instead of silently propagating
+
+For a real source that permits late-arriving or updated historical events, the incremental filter would typically use an ingestion/update timestamp or a configurable lookback window rather than only `created_at`.
 
 ## How to run
 
@@ -114,13 +151,19 @@ dbt deps
 dbt seed
 ```
 
-6. Build and test the project:
+6. Check source freshness:
+
+```bash
+dbt source freshness
+```
+
+7. Build and test the project:
 
 ```bash
 dbt build
 ```
 
-7. Generate documentation:
+8. Generate documentation:
 
 ```bash
 dbt docs generate
@@ -131,14 +174,14 @@ dbt docs serve
 
 A simple way to explain the project:
 
-> "I built WalletFlow to demonstrate how I would structure analytics engineering for a digital wallet. I started with synthetic customer, wallet, and transaction data. I cleaned the raw tables in staging models, created reusable intermediate logic, and then built fact, dimension, and KPI marts. I also added dbt tests so the reporting layer is not only useful but trustworthy. The final marts can feed tools such as Looker or Power BI without every analyst redefining the same metrics."
+> "I built WalletFlow to demonstrate how I would structure analytics engineering for a digital wallet. I started with synthetic customer, wallet and transaction data, declared the raw tables as dbt sources, and standardised them in staging. I built reusable intermediate logic, an incremental transaction fact, customer and KPI marts, and a cohort-retention model. I also added source, schema and reconciliation tests so I can detect grain, integrity and business-rule problems before they reach a dashboard. The objective is to create a trusted analytics layer rather than have every analyst redefine the same metrics."
 
-## Next improvements
+## Further improvements
 
-- Add incremental models for high-volume transaction data
-- Add snapshots for customer profile changes
-- Add cohort retention and funnel marts
-- Add orchestration and CI checks
+- Add customer snapshots for slowly changing attributes
+- Add a configurable late-arriving-data lookback window to the incremental fact
+- Add CI with `dbt build` on pull requests
+- Add orchestration and alerting around failed tests/freshness checks
 - Connect the marts to a live BI dashboard
 
 ## Author
