@@ -1,81 +1,56 @@
 # WalletFlow Analytics
 
-**A fintech analytics engineering portfolio project by Fuad Abiola Adebisi.**
+WalletFlow is a personal analytics engineering project for a fictional digital-wallet platform. It uses synthetic data to demonstrate a complete reporting workflow from raw sources through tested marts and product KPIs.
 
-WalletFlow models a fictional digital-wallet platform and demonstrates how raw customer, wallet and transaction data can be transformed into reliable, tested, business-ready analytics datasets.
+All customer, wallet and transaction records in this project are generated. No employer or production data is included.
 
-> All data in this project is synthetic. No real customer or employer data is used.
+## Dataset
 
-## Project at a glance
+- **250** customers
+- **250** wallets
+- **5,000** transactions
+- **~₦145.85m** gross transaction value
+- **~88.4%** transaction success rate
+- Activity from **January to June 2026**
 
-- **250** synthetic customers
-- **250** synthetic wallets
-- **5,000** synthetic transactions
-- **~₦145.85m** generated transaction value
-- **~88.4%** overall transaction success rate
-- Transaction activity from **January to June 2026**
+## Models
 
-## What I built
+### Staging
+Source data is standardised with explicit column selection, consistent data types, controlled categorical values and null handling.
 
-### Transformation layer
-Raw source-aligned tables are cleaned into staging models before reusable intermediate logic is applied.
+### Core models
 
-### Analytics marts
-The project exposes:
+- `fct_transactions` — incremental transaction fact table
+- `dim_customers` — customer dimension with wallet and activity measures
+- `int_customer_daily_activity` — reusable customer-day transaction logic
 
-- `fct_transactions` — transaction-level fact model
-- `dim_customers` — customer dimension with wallet and activity context
-- `mart_daily_wallet_kpis` — daily product and executive KPIs
-- `mart_customer_monthly_activity` — customer engagement by month
+### Reporting marts
 
-### Data quality
-Tests cover primary-key integrity, accepted values, customer relationships, positive transaction values and successful-transaction completion timestamps.
+- `mart_daily_wallet_kpis` — daily transaction and customer metrics
+- `mart_customer_monthly_activity` — customer activity by month
+- `mart_monthly_engagement_kpis` — DAU, MAU, DAU/MAU and monthly retention
+- `mart_customer_cohort_retention` — retention by first-success cohort
 
-### BI layer
-The dashboard specification focuses on GTV, transaction success rate, transaction mix, active customers, customer segments and failed-transaction monitoring.
+## Data quality
 
-## Architecture
+Tests cover primary keys, relationships, accepted values, transaction amounts, completion timestamps, status reconciliation, composite grains and retention logic.
 
-```text
-Raw data
-   │
-   ├── customers
-   ├── wallets
-   └── transactions
-          │
-          ▼
-     Staging models
-          │
-          ▼
-  Intermediate models
-          │
-          ▼
-  Facts + dimensions
-          │
-          ▼
-      KPI marts
-          │
-          ▼
-Looker / Power BI / Looker Studio
-```
+## Incremental processing
 
-## Why this matters
+`fct_transactions` uses `transaction_id` as the MERGE key and reprocesses a configurable three-day window on incremental runs. This allows recently delayed or corrected records to be picked up without rebuilding the full fact table.
 
-The main analytics engineering principle demonstrated here is that business metrics should be defined once in governed transformation models rather than repeatedly inside dashboards. That helps teams use the same definitions for transaction success, transaction value and active customers.
+## Reporting
 
-## Interview-ready explanation
+The reporting layer includes transaction performance, GTV, DAU, MAU, DAU/MAU, month-over-month retention and cohort retention. Metric definitions are kept in dbt models rather than repeated inside individual dashboards.
 
-> "WalletFlow is a synthetic digital-wallet analytics project I built to demonstrate analytics engineering. I modelled customer, wallet and transaction data through staging, intermediate and mart layers. I then added tests around key data-quality rules and created BI-ready KPI models so reporting tools do not have to redefine business logic."
-
-## Explore the project
+## Project links
 
 - [Architecture](architecture.md)
-- [Interview walkthrough](interview_walkthrough.md)
+- [Technical notes](technical_notes.md)
 - [Dashboard specification](../dashboard/README.md)
-- [GitHub repository](https://github.com/Fuddie/walletflow-analytics)
+- [Repository](https://github.com/Fuddie/walletflow-analytics)
 
 ## Author
 
 **Fuad Abiola Adebisi**  
-Analytics Engineer  
-[GitHub](https://github.com/Fuddie)
+Analytics Engineer
