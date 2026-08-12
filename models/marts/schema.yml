@@ -1,23 +1,26 @@
 version: 2
 
 # Mart tests protect the business-facing layer that would feed BI dashboards.
-# The comments explain the business rule each test is intended to enforce.
+# Each test below documents the business rule it enforces and the type of defect
+# it is intended to catch.
 models:
   - name: fct_transactions
     description: >-
       Central transaction fact table. Grain is one row per transaction_id.
+      The model is incrementally materialised with transaction_id as the merge key.
     columns:
       - name: transaction_id
         description: Primary key for a wallet transaction event.
         tests:
-          # not_null + unique enforce the declared fact-table grain.
+          # Grain test: every fact row must have a transaction identifier.
           - not_null
+          # Duplicate-protection test: one transaction_id must map to one fact row.
           - unique
 
       - name: customer_id
         description: Customer associated with the transaction.
         tests:
-          # relationships: every fact row must map to a known staged customer.
+          # Referential-integrity test: every fact customer must exist upstream.
           - relationships:
               to: ref('stg_customers')
               field: customer_id
@@ -25,7 +28,7 @@ models:
       - name: wallet_id
         description: Wallet used for the transaction.
         tests:
-          # relationships: every fact row must map to a known staged wallet.
+          # Referential-integrity test: every fact wallet must exist upstream.
           - relationships:
               to: ref('stg_wallets')
               field: wallet_id
@@ -33,12 +36,13 @@ models:
       - name: transaction_date
         description: Calendar date derived from created_at for BI filtering and aggregation.
         tests:
+          # Reporting rows must always have a usable calendar date.
           - not_null
 
       - name: amount_ngn
         description: Transaction amount denominated in Nigerian naira.
         tests:
-          # not_null: financial facts should always carry an amount.
+          # Financial facts should never have a missing amount.
           - not_null
 
       - name: is_successful
@@ -64,14 +68,14 @@ models:
       - name: customer_id
         description: Primary key for the customer dimension.
         tests:
-          # not_null + unique enforce one row per customer.
+          # Grain enforcement: each customer appears exactly once.
           - not_null
           - unique
 
       - name: lifetime_transaction_count
         description: Total transaction attempts observed for the customer.
         tests:
-          # not_null: customers with no activity are intentionally represented as zero.
+          # Customers without activity are intentionally represented as zero, not NULL.
           - not_null
 
       - name: lifetime_successful_transaction_count
@@ -92,7 +96,7 @@ models:
       - name: transaction_date
         description: Reporting date for the daily KPI row.
         tests:
-          # unique + not_null ensure one KPI row per date.
+          # Grain enforcement: one and only one KPI row per date.
           - not_null
           - unique
 
@@ -104,8 +108,13 @@ models:
       - name: transaction_success_rate
         description: Successful transaction count divided by total transaction attempts.
         tests:
-          # not_null: every populated reporting date should have a calculable rate.
+          # Every populated reporting date should have a calculable success rate.
           - not_null
+          # Range test: a proportion must remain between 0 and 1 inclusive.
+          - dbt_utils.accepted_range:
+              min_value: 0
+              max_value: 1
+              inclusive: true
 
       - name: gross_transaction_value_ngn
         description: Sum of attempted transaction value, irrespective of final status.
@@ -121,6 +130,16 @@ models:
     description: >-
       Monthly customer activity mart used for engagement, retention and cohort analysis.
       Grain is one row per customer_id per activity_month.
+
+    tests:
+      # Composite-grain test: a customer must appear only once in a given month.
+      # This catches accidental duplicate monthly aggregates caused by joins or
+      # grouping changes.
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns:
+            - activity_month
+            - customer_id
+
     columns:
       - name: activity_month
         description: Calendar month of customer activity.
@@ -131,7 +150,7 @@ models:
         description: Customer represented by the monthly activity row.
         tests:
           - not_null
-          # relationships: monthly activity must map back to a known customer.
+          # Monthly activity must map back to a known customer.
           - relationships:
               to: ref('stg_customers')
               field: customer_id
@@ -150,3 +169,63 @@ models:
         description: Most recent transaction date observed for the customer in the month.
         tests:
           - not_null
+
+  - name: mart_customer_cohort_retention
+    description: >-
+      Monthly retention mart based on first successful transaction cohort.
+      Grain is one row per cohort_month + activity_month.
+
+    tests:
+      # Composite-grain test: each cohort/activity-month pair must have only one
+      # aggregated retention row.
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns:
+            - cohort_month
+            - activity_month
+
+    columns:
+      - name: cohort_month
+        description: Month of the customer's first successful transaction.
+        tests:
+          - not_null
+
+      - name: activity_month
+        description: Month in which members of the cohort successfully transacted.
+        tests:
+          - not_null
+
+      - name: month_number
+        description: Number of whole months since cohort acquisition; 0 is the cohort month.
+        tests:
+          - not_null
+          # Cohort activity cannot logically occur before acquisition.
+          - dbt_utils.accepted_range:
+              min_value: 0
+              inclusive: true
+
+      - name: cohort_size
+        description: Number of customers originally acquired into the cohort.
+        tests:
+          - not_null
+          # Every cohort represented in the mart must contain at least one customer.
+          - dbt_utils.accepted_range:
+              min_value: 1
+              inclusive: true
+
+      - name: retained_customers
+        description: Distinct cohort customers active in the activity month.
+        tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              min_value: 0
+              inclusive: true
+
+      - name: retention_rate
+        description: retained_customers divided by cohort_size.
+        tests:
+          - not_null
+          # Logical range test: retention cannot be below 0% or above 100%.
+          - dbt_utils.accepted_range:
+              min_value: 0
+              max_value: 1
+              inclusive: true
