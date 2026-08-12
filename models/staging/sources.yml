@@ -1,0 +1,70 @@
+version: 2
+
+# Raw-source declarations make the ingestion boundary explicit in dbt docs.
+# In this portfolio project, the raw tables are created from synthetic dbt seeds.
+# In production, these source definitions would normally point to landing tables
+# populated by an ingestion tool or application event pipeline.
+sources:
+  - name: walletflow_raw
+    description: Synthetic raw WalletFlow source tables loaded into the raw schema.
+    schema: raw
+
+    tables:
+      - name: raw_customers
+        description: Synthetic customer registration records.
+        columns:
+          - name: customer_id
+            description: Raw customer business key.
+            tests:
+              # Source-level not_null catches malformed records before staging.
+              - not_null
+              # Source-level unique checks whether the upstream extract violates
+              # the expected one-row-per-customer grain.
+              - unique
+
+      - name: raw_wallets
+        description: Synthetic wallet master records.
+        columns:
+          - name: wallet_id
+            description: Raw wallet business key.
+            tests:
+              - not_null
+              - unique
+          - name: customer_id
+            description: Customer that owns the wallet.
+            tests:
+              - not_null
+
+      - name: raw_transactions
+        description: Synthetic wallet transaction events used as the main event source.
+
+        # DEMO FRESHNESS NOTE:
+        # The synthetic dataset has no true ingestion timestamp. created_at is an
+        # event timestamp, so it is used here only as a freshness proxy to show
+        # how dbt source freshness is configured. A production pipeline should
+        # instead use an ingestion field such as loaded_at or _ingested_at.
+        loaded_at_field: created_at
+        freshness:
+          # Warn when the newest transaction event is more than 60 days old.
+          warn_after: {count: 60, period: day}
+          # Fail when the newest transaction event is more than 90 days old.
+          error_after: {count: 90, period: day}
+
+        columns:
+          - name: transaction_id
+            description: Raw transaction business key.
+            tests:
+              - not_null
+              - unique
+          - name: customer_id
+            description: Customer associated with the transaction event.
+            tests:
+              - not_null
+          - name: wallet_id
+            description: Wallet associated with the transaction event.
+            tests:
+              - not_null
+          - name: created_at
+            description: Transaction event timestamp; used as a freshness proxy in this demo.
+            tests:
+              - not_null
