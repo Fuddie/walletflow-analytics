@@ -1,9 +1,11 @@
 name: 'walletflow_analytics'
-version: '1.0.0'
+version: '1.1.0'
 config-version: 2
 
 profile: 'walletflow_analytics'
 
+# Project paths keep transformations, tests, seeds and documentation organised
+# using standard dbt conventions.
 model-paths: ["models"]
 analysis-paths: ["analyses"]
 test-paths: ["tests"]
@@ -16,18 +18,32 @@ clean-targets:
   - "target"
   - "dbt_packages"
 
+# Project-level variables make operational behaviour configurable without
+# editing model SQL. The transaction fact uses this value during incremental
+# runs to re-read recent history and catch late-arriving records.
+vars:
+  incremental_lookback_days: 3
+
 models:
   walletflow_analytics:
+    # Staging models are lightweight views because they standardise raw inputs.
     staging:
       +materialized: view
       +schema: staging
+
+    # Intermediate models are reusable transformation views shared by marts.
     intermediate:
       +materialized: view
       +schema: intermediate
+
+    # Business-facing marts default to tables for predictable BI performance.
+    # Individual models can override this, as fct_transactions does with an
+    # incremental materialisation.
     marts:
       +materialized: table
       +schema: marts
 
 seeds:
   walletflow_analytics:
+    # Synthetic CSV inputs represent the raw landing layer in this portfolio.
     +schema: raw
