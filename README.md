@@ -2,13 +2,13 @@
 
 WalletFlow is a personal analytics engineering project for a fictional digital-wallet business. It uses synthetic customer, wallet and transaction data to model transaction performance, customer activity and retention with **dbt, BigQuery SQL and Python**.
 
-All data in this repository is synthetic. No employer, customer or production data is used.
+The repository uses synthetic data only and contains no employer, customer or production data.
 
 ## Project scope
 
 The project addresses a common reporting problem: operational transaction data is useful for processing payments, but it needs cleaning, consistent definitions and testing before it is suitable for analytics.
 
-WalletFlow provides a structured reporting layer for questions such as:
+WalletFlow builds a structured reporting layer for questions such as:
 
 - How much transaction value is processed each day?
 - What percentage of transactions succeed, fail or reverse?
